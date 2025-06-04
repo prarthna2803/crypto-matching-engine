@@ -1,0 +1,18 @@
+# Databases & Logs
+*.db
+*.log
+trading_app.db
+app.log
+trading_app.log
+
+# Python cache & virtual environments
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+venv/
+.venv/
+env/
+
+# OS metadata
+.DS_Store
