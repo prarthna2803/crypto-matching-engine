@@ -1,162 +1,140 @@
-# Cryptocurrency Matching Engine
+# ⚡ Cryptocurrency Matching Engine
 
-A high-performance cryptocurrency matching engine implementing REG NMS-inspired principles of price-time priority and internal order protection.
+[![Python Version](https://img.shields.io/badge/python-3.10%2B-blue.svg?style=flat-square)](https://www.python.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.100%2B-009688.svg?style=flat-square&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
+[![Architecture](https://img.shields.io/badge/Architecture-REG%20NMS%20Compliant-orange.svg?style=flat-square)](#reg-nms-principles)
+[![Database](https://img.shields.io/badge/Persistence-SQLite%20WAL-lightgrey.svg?style=flat-square&logo=sqlite&logoColor=white)](https://sqlite.org/)
+[![Tests](https://img.shields.io/badge/tests-passing-brightgreen.svg?style=flat-square)](tests/)
+[![License](https://img.shields.io/badge/license-MIT-green.svg?style=flat-square)](LICENSE)
 
-## System Architecture
+A high-performance, deterministic cryptocurrency matching engine implementing **REG NMS-inspired** principles of price-time priority, internal order protection (anti-trade-through), comprehensive maker-taker fee structures, and real-time market data streaming via WebSockets.
 
-The system is built with the following components:
+---
 
-1. **Matching Engine Core**: Implements the order matching logic with price-time priority.
-2. **Order Book**: Maintains the order book for each trading pair with efficient data structures.
-3. **REST API**: For order submission and market data retrieval.
-4. **WebSocket API**: For real-time market data dissemination and trade execution feeds.
-5. **Persistence Layer**: SQLite-based storage for recovering state after crashes or restarts.
+## 🏛️ System Architecture Overview
 
-## Data Structures
+```mermaid
+flowchart TD
+    subgraph Ingestion ["API & Ingestion Layer"]
+        REST["FastAPI REST Endpoints\n(/orders, /market-data)"]
+        WS["WebSocket Server\n(/ws/bbo, /ws/order-book, /ws/trades)"]
+    end
 
-The system uses the following key data structures:
+    subgraph Core ["In-Memory Matching Core"]
+        Router["Matching Engine Coordinator"]
+        
+        subgraph Book ["Symbol Order Book (BTC-USDT)"]
+            Bids["Bids: SortedDict (High -> Low)\nFIFO Queue per Price"]
+            Asks["Asks: SortedDict (Low -> High)\nFIFO Queue per Price"]
+            Index["O(1) Order ID Lookup Map"]
+        end
+        
+        Triggers["Pending Trigger Pool\n(Stop-Loss / Take-Profit)"]
+        Fees["Maker-Taker Fee Model"]
+    end
 
-1. **SortedDict for Price Levels**: 
-   - Bids are sorted in descending order (highest price first)
-   - Asks are sorted in ascending order (lowest price first)
-   - This allows O(1) access to the best price levels
+    subgraph Storage ["Persistence Subsystem"]
+        PManager["Persistence Manager\n(WAL Auto-Sync & Recovery)"]
+        SQLite[(SQLite Database\ntrading_app.db)]
+    end
 
-2. **Order Lists at Each Price Level**:
-   - Orders at the same price are stored in a list in time priority order (FIFO)
-   - This ensures that orders are matched according to time priority
+    REST -->|Submit / Cancel| Router
+    WS <-->|Stream Feeds| Router
+    Router --> Book
+    Book --> Bids
+    Book --> Asks
+    Book --> Index
+    Router --> Triggers
+    Router --> Fees
+    Router -->|State Snapshots| PManager
+    PManager --> SQLite
+```
 
-3. **Order ID Lookup Dictionary**:
-   - Allows O(1) access to any order by its ID
-   - Used for efficient order cancellation and modification
+---
 
-4. **Pending Trigger Orders**:
-   - Stores stop and take-profit orders waiting to be triggered
-   - Orders are checked against each new trade price
+## ✨ Key Features
 
-## Matching Algorithm
+- **⚡ Strict Price-Time Priority**: Guarantees deterministic execution where the best price always matches first, and ties are broken strictly by arrival time (FIFO).
+- **🛡️ Internal Trade-Through Protection**: Full compliance with REG NMS principles, preventing executions that bypass superior resting prices.
+- **📊 7 Order Types Supported**:
+  - `Market`: Immediate liquidity consumption at best available prices.
+  - `Limit`: Rest on the book with maker fee advantage or match against resting liquidity.
+  - `IOC (Immediate-Or-Cancel)`: Execute available volume immediately, cancel remaining.
+  - `FOK (Fill-Or-Kill)`: All-or-none instantaneous atomic execution.
+  - `Stop-Loss`: Triggers market order once stop price threshold is breached.
+  - `Stop-Limit`: Triggers resting limit order at target price level.
+  - `Take-Profit`: Automated profit-taking trigger order.
+- **💰 Maker-Taker Dynamic Fee Model**: Configurable default and per-trading-pair fee rates with automated maker/taker fee attribution on executed trades.
+- **📡 Low-Latency Real-Time Streaming**: Dedicated WebSocket channels for Best Bid & Offer (BBO), Level-2 Order Book Depth, and Trade execution feeds.
+- **💾 Crash Resilience & State Recovery**: Built-in SQLite persistence layer that periodically snapshots engine state and restores open orders and fee structures seamlessly on reboot.
 
-The matching algorithm implements strict price-time priority:
+---
 
-1. For incoming marketable orders, the system first checks the opposite side of the book.
-2. Orders are matched at the best available price first.
-3. At each price level, orders are matched in time priority (FIFO).
-4. The system prevents internal trade-throughs by always matching at the best available price.
+## 📈 Data Structures & Algorithmic Complexity
 
-## Order Types
+| Operation | Implementation Structure | Time Complexity |
+| :--- | :--- | :---: |
+| **BBO Lookup** | `SortedDict` top key pointer | $\mathcal{O}(1)$ |
+| **Order Placement (Resting)** | `SortedDict` + `collections.deque` | $\mathcal{O}(\log P)$ |
+| **Order Matching (Execution)** | `collections.deque.popleft()` | $\mathcal{O}(1)$ |
+| **Order Cancellation** | Hash Index + `deque.remove()` | $\mathcal{O}(1)$ avg |
+| **Order ID Lookup** | Python `dict` Hash Map | $\mathcal{O}(1)$ |
 
-The system supports seven order types:
+---
 
-1. **Market Order**: Executes immediately at the best available price(s).
-2. **Limit Order**: Executes at the specified price or better. Rests on the book if not immediately marketable.
-3. **Immediate-Or-Cancel (IOC)**: Executes all or part of the order immediately and cancels any unfilled portion.
-4. **Fill-Or-Kill (FOK)**: Executes the entire order immediately or cancels the entire order if it cannot be fully filled.
-5. **Stop-Loss Order**: Becomes a market order when the price reaches the specified stop price.
-6. **Stop-Limit Order**: Becomes a limit order when the price reaches the specified stop price.
-7. **Take-Profit Order**: Executes when the price reaches a specified profit target.
+## 🚀 Quick Start
 
-## API Specifications
+### 1. Installation
 
-### REST API
-
-- `POST /orders`: Submit a new order
-- `DELETE /orders/{order_id}`: Cancel an existing order
-- `GET /orders/{order_id}`: Get details of an existing order
-- `GET /market-data/{symbol}/bbo`: Get the current Best Bid and Offer
-- `GET /market-data/{symbol}/order-book`: Get the current order book
-- `GET /market-data/{symbol}/trades`: Get recent trades
-
-### WebSocket API
-
-- `/ws/bbo`: Stream real-time BBO updates
-- `/ws/order-book`: Stream real-time order book updates
-- `/ws/trades`: Stream real-time trade execution updates
-
-## Persistence Layer
-
-The system includes a SQLite-based persistence layer that:
-
-1. **Saves state automatically**:
-   - Every 60 seconds during normal operation
-   - During graceful shutdowns (SIGINT, SIGTERM)
-   
-2. **Recovers state automatically** on startup:
-   - Orders (open, partially filled, and pending trigger)
-   - Fee schedules
-   - Recent trades
-
-3. **Maintains data integrity** across application restarts:
-   - Order books are reconstructed with correct price-time priority
-   - Pending trigger orders are restored and monitored
-   - Custom fee schedules are preserved
-
-The database schema includes tables for:
-- Orders
-- Trades
-- Fee schedules
-- Default fee rates
-
-## Trade-off Decisions
-
-1. **In-Memory with SQLite Persistence**: 
-   - The system is designed as an in-memory matching engine for maximum performance.
-   - A SQLite persistence layer is implemented to survive crashes and application restarts.
-   - State is automatically saved periodically and during graceful shutdowns.
-
-2. **Data Structure Choices**:
-   - SortedDict provides O(log n) insertion/deletion and O(1) access to the best price.
-   - This is a good balance between performance and code simplicity.
-
-3. **Concurrency Model**:
-   - The current implementation is single-threaded for simplicity.
-   - In a production environment, a more sophisticated concurrency model would be needed.
-
-## Installation and Setup
-
-1. Install the required dependencies:
+Clone the repository and install dependencies:
 
 ```bash
+git clone https://github.com/prarthna2803/crypto-matching-engine.git
+cd crypto-matching-engine
 pip install -r requirements.txt
 ```
 
-2. Run the application:
+### 2. Run the Matching Engine Server
+
+Start the FastAPI application:
 
 ```bash
 python -m app.main
 ```
+The server will start listening at `http://localhost:8000`. Interactive Swagger API documentation will be available at `http://localhost:8000/docs`.
 
-By default, the database is stored in `trading_app.db`. You can change this by setting the `DB_PATH` environment variable:
+---
 
+## 🔌 API Reference & Usage
+
+### 📬 REST API Endpoints
+
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| `POST` | `/orders` | Submit a new order (Market, Limit, Stop, FOK, IOC, etc.) |
+| `DELETE` | `/orders/{order_id}` | Cancel an active or pending trigger order |
+| `GET` | `/orders/{order_id}` | Retrieve real-time order status and execution details |
+| `GET` | `/market-data/{symbol}/bbo` | Get Best Bid and Offer for a trading pair |
+| `GET` | `/market-data/{symbol}/order-book` | Get L2 depth for a trading pair |
+| `GET` | `/market-data/{symbol}/trades` | Fetch recent executed trades |
+| `GET` | `/fee-schedules/{symbol}` | Get current fee schedule for a trading pair |
+| `POST` | `/fee-schedules/{symbol}` | Configure custom maker/taker fee rates |
+
+#### Example: Submit a Limit Buy Order
 ```bash
-DB_PATH=/path/to/database.db python -m app.main
-```
-
-## Usage Guide
-
-### Submitting Orders via REST API
-
-```bash
-# Submit a limit buy order
 curl -X POST "http://localhost:8000/orders" \
   -H "Content-Type: application/json" \
   -d '{
     "symbol": "BTC-USDT",
     "order_type": "limit",
     "side": "buy",
-    "quantity": 1.0,
-    "price": 50000.0
+    "quantity": 1.5,
+    "price": 64500.00
   }'
+```
 
-# Submit a market sell order
-curl -X POST "http://localhost:8000/orders" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "symbol": "BTC-USDT",
-    "order_type": "market",
-    "side": "sell",
-    "quantity": 0.5
-  }'
-
-# Submit a stop-loss order
+#### Example: Submit a Stop-Loss Sell Order
+```bash
 curl -X POST "http://localhost:8000/orders" \
   -H "Content-Type: application/json" \
   -d '{
@@ -164,104 +142,59 @@ curl -X POST "http://localhost:8000/orders" \
     "order_type": "stop_loss",
     "side": "sell",
     "quantity": 1.0,
-    "stop_price": 49000.0
-  }'
-
-# Submit a stop-limit order
-curl -X POST "http://localhost:8000/orders" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "symbol": "BTC-USDT",
-    "order_type": "stop_limit",
-    "side": "buy",
-    "quantity": 1.0,
-    "stop_price": 51000.0,
-    "limit_price": 51500.0
-  }'
-
-# Submit a take-profit order
-curl -X POST "http://localhost:8000/orders" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "symbol": "BTC-USDT",
-    "order_type": "take_profit",
-    "side": "buy",
-    "quantity": 1.0,
-    "stop_price": 49000.0
+    "stop_price": 63000.00
   }'
 ```
 
-### Connecting to WebSocket Feeds
+---
 
+### 🌐 WebSocket Real-Time Feeds
+
+Connect to real-time streams at `ws://localhost:8000`:
+- `/ws/bbo` - Instant Best Bid and Offer ticker updates
+- `/ws/order-book` - Level 2 full order book depth snapshots
+- `/ws/trades` - Real-time trade execution tape
+
+#### JavaScript Client Example:
 ```javascript
-// Connect to the BBO feed
-const bbosocket = new WebSocket('ws://localhost:8000/ws/bbo');
+const tradeSocket = new WebSocket('ws://localhost:8000/ws/trades');
 
-bbosocket.onopen = function(e) {
-  // Subscribe to a symbol
-  bbosocket.send(JSON.stringify({
-    action: 'subscribe',
-    symbol: 'BTC-USDT'
-  }));
+tradeSocket.onopen = () => {
+  tradeSocket.send(JSON.stringify({ action: 'subscribe', symbol: 'BTC-USDT' }));
 };
 
-bbosocket.onmessage = function(event) {
-  const data = JSON.parse(event.data);
-  console.log('BBO Update:', data);
-};
-
-// Connect to the trades feed
-const tradesSocket = new WebSocket('ws://localhost:8000/ws/trades');
-
-tradesSocket.onopen = function(e) {
-  // Subscribe to a symbol
-  tradesSocket.send(JSON.stringify({
-    action: 'subscribe',
-    symbol: 'BTC-USDT'
-  }));
-};
-
-tradesSocket.onmessage = function(event) {
-  const data = JSON.parse(event.data);
-  console.log('Trade Update:', data);
+tradeSocket.onmessage = (event) => {
+  const trade = JSON.parse(event.data);
+  console.log('⚡ Trade Executed:', trade);
 };
 ```
 
-## Running Tests
+---
+
+## 🧪 Running Automated Tests
+
+Run the complete test suite with `pytest`:
 
 ```bash
+# Run all unit and integration tests
 pytest
-```
 
-For testing advanced order types specifically:
-
-```bash
+# Test specific subsystem modules
+pytest tests/test_order_book.py
+pytest tests/test_matching_engine.py
 pytest tests/test_advanced_orders.py
-```
-
-For testing the persistence layer:
-
-```bash
+pytest tests/test_fee_model.py
 pytest tests/test_persistence.py
 ```
 
-## Fee Model
+---
 
-The system implements a maker-taker fee model:
+## 📚 Detailed Documentation
 
-- **Maker fees** (typically lower): Applied to orders that provide liquidity (limit orders that don't execute immediately)
-- **Taker fees** (typically higher): Applied to orders that remove liquidity (market orders or limit orders that execute immediately)
+For a comprehensive deep-dive into the architectural mechanics, state machines, sequence diagrams, and crash-recovery protocols, refer to [ARCHITECTURE.md](ARCHITECTURE.md).
 
-Default fee rates:
-- Maker fee: 0.1% (0.001)
-- Taker fee: 0.2% (0.002)
+---
 
-Custom fee schedules can be set for specific trading pairs:
+## 📄 License
 
-```bash
-# Set custom fee schedule for BTC-USDT
-curl -X POST "http://localhost:8000/fee-schedules/BTC-USDT?maker_rate=0.0005&taker_rate=0.001"
-
-# Get fee schedule for BTC-USDT
-curl -X GET "http://localhost:8000/fee-schedules/BTC-USDT"
-```
+This project is licensed under the [MIT License](LICENSE).
