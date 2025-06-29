@@ -1,4 +1,4 @@
-# ⚡ Cryptocurrency Matching Engine
+# Cryptocurrency Matching Engine
 
 [![Python Version](https://img.shields.io/badge/python-3.10%2B-blue.svg?style=flat-square)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.100%2B-009688.svg?style=flat-square&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
@@ -11,7 +11,7 @@ A high-performance, deterministic cryptocurrency matching engine implementing **
 
 ---
 
-## 🏛️ System Architecture Overview
+## System Architecture Overview
 
 ```mermaid
 flowchart TD
@@ -52,11 +52,11 @@ flowchart TD
 
 ---
 
-## ✨ Key Features
+## Key Features
 
-- **⚡ Strict Price-Time Priority**: Guarantees deterministic execution where the best price always matches first, and ties are broken strictly by arrival time (FIFO).
-- **🛡️ Internal Trade-Through Protection**: Full compliance with REG NMS principles, preventing executions that bypass superior resting prices.
-- **📊 7 Order Types Supported**:
+- **Strict Price-Time Priority**: Guarantees deterministic execution where the best price always matches first, and ties are broken strictly by arrival time (FIFO).
+- **Internal Trade-Through Protection**: Full compliance with REG NMS principles, preventing executions that bypass superior resting prices.
+- **7 Order Types Supported**:
   - `Market`: Immediate liquidity consumption at best available prices.
   - `Limit`: Rest on the book with maker fee advantage or match against resting liquidity.
   - `IOC (Immediate-Or-Cancel)`: Execute available volume immediately, cancel remaining.
@@ -64,13 +64,13 @@ flowchart TD
   - `Stop-Loss`: Triggers market order once stop price threshold is breached.
   - `Stop-Limit`: Triggers resting limit order at target price level.
   - `Take-Profit`: Automated profit-taking trigger order.
-- **💰 Maker-Taker Dynamic Fee Model**: Configurable default and per-trading-pair fee rates with automated maker/taker fee attribution on executed trades.
-- **📡 Low-Latency Real-Time Streaming**: Dedicated WebSocket channels for Best Bid & Offer (BBO), Level-2 Order Book Depth, and Trade execution feeds.
-- **💾 Crash Resilience & State Recovery**: Built-in SQLite persistence layer that periodically snapshots engine state and restores open orders and fee structures seamlessly on reboot.
+- **Maker-Taker Dynamic Fee Model**: Configurable default and per-trading-pair fee rates with automated maker/taker fee attribution on executed trades.
+- **Low-Latency Real-Time Streaming**: Dedicated WebSocket channels for Best Bid & Offer (BBO), Level-2 Order Book Depth, and Trade execution feeds.
+- **Crash Resilience & State Recovery**: Built-in SQLite persistence layer that periodically snapshots engine state and restores open orders and fee structures seamlessly on reboot.
 
 ---
 
-## 📈 Data Structures & Algorithmic Complexity
+## Data Structures & Algorithmic Complexity
 
 | Operation | Implementation Structure | Time Complexity |
 | :--- | :--- | :---: |
@@ -82,7 +82,7 @@ flowchart TD
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
 ### 1. Installation
 
@@ -105,9 +105,9 @@ The server will start listening at `http://localhost:8000`. Interactive Swagger 
 
 ---
 
-## 🔌 API Reference & Usage
+## API Reference & Usage
 
-### 📬 REST API Endpoints
+### REST API Endpoints
 
 | Method | Endpoint | Description |
 | :--- | :--- | :--- |
@@ -148,7 +148,7 @@ curl -X POST "http://localhost:8000/orders" \
 
 ---
 
-### 🌐 WebSocket Real-Time Feeds
+## WebSocket Real-Time Feeds
 
 Connect to real-time streams at `ws://localhost:8000`:
 - `/ws/bbo` - Instant Best Bid and Offer ticker updates
@@ -165,13 +165,13 @@ tradeSocket.onopen = () => {
 
 tradeSocket.onmessage = (event) => {
   const trade = JSON.parse(event.data);
-  console.log('⚡ Trade Executed:', trade);
+  console.log('Trade Executed:', trade);
 };
 ```
 
 ---
 
-## 🧪 Running Automated Tests
+## Running Automated Tests
 
 Run the complete test suite with `pytest`:
 
@@ -189,12 +189,12 @@ pytest tests/test_persistence.py
 
 ---
 
-## 📚 Detailed Documentation
+## Detailed Documentation
 
 For a comprehensive deep-dive into the architectural mechanics, state machines, sequence diagrams, and crash-recovery protocols, refer to [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ---
 
-## 📄 License
+## License
 
 This project is licensed under the [MIT License](LICENSE).
