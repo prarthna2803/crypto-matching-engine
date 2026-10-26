@@ -198,3 +198,7 @@ For a comprehensive deep-dive into the architectural mechanics, state machines, 
 ## License
 
 This project is licensed under the [MIT License](LICENSE).
+
+## Hackathon Project
+
+Developed as part of a hackathon in collaboration with Kshitij Gupta.
